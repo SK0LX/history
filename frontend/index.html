@@ -1,0 +1,27 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Кроссворд</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<!-- Добавляем контейнер для кнопок -->
+<div class="controls">
+    <button onclick="checkAnswers()">Проверить ответы</button>
+    <button onclick="resetCrossword()">Новый кроссворд</button>
+</div>
+
+<div class="container">
+    <div id="clues-horizontal" class="clues-column"></div>
+
+    <div class="crossword-wrapper">
+        <div id="crossword-grid"></div>
+    </div>
+
+    <div id="clues-vertical" class="clues-column"></div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>

@@ -76,4 +76,12 @@ def api_crossword():
     })
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    w1, w2, clue1, clue2 = get_random_pair()
+    crossword = build_crossword(w1.strip(), w2.strip())
+    print(jsonify({
+        'word1': w1,
+        'word2': w2,
+        'clue1': clue1,
+        'clue2': clue2,
+        'grid': crossword['rows']
+    }))
