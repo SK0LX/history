@@ -1,4 +1,4 @@
-﻿import json
+import json
 import random
 import time
 from datetime import datetime
@@ -10,202 +10,150 @@ class CrosswordGenerator:
     def __init__(self, width, height, word_list, time_limit=5.0, try_second_pass=False):
         self.width = width
         self.height = height
-        # Преобразование элементов word_list в кортежи (слово, подсказка), если они строки
-        processed_word_list = []
+        # Normalize word_list to (word, clue) tuples
+        processed = []
         for w in word_list:
             if isinstance(w, str):
-                processed_word_list.append((w, ''))
+                processed.append((w, ''))
             else:
-                processed_word_list.append((w[0], w[1]))
-        # Фильтрация слов, которые являются подстроками других слов
+                processed.append((w[0], w[1]))
+        # Filter out words contained in longer words, sort by length desc
         self.word_list = sorted(
-            [w for w in processed_word_list if not any(w[0] != other[0] and w[0] in other[0] for other in processed_word_list)],
-            key=lambda x: len(x[0]),
-            reverse=True
+            [w for w in processed if not any(w[0] != o[0] and w[0] in o[0] for o in processed)],
+            key=lambda x: len(x[0]), reverse=True
         )
         self.time_limit = time_limit
         self.try_second_pass = try_second_pass
 
     def _create_empty_grid(self):
-        return [[None for _ in range(self.width)] for _ in range(self.height)]
+        return [[None] * self.width for _ in range(self.height)]
 
-    def _place_word(self, grid, word, position):
-        x, y, direction = position
-        dx, dy = (1, 0) if direction == 'H' else (0, 1)
-        for letter in word:
-            grid[y][x] = letter
-            x += dx
-            y += dy
+    def _place_word(self, grid, word, pos):
+        x, y, d = pos
+        dx, dy = (1, 0) if d == 'H' else (0, 1)
+        for ch in word:
+            grid[y][x] = ch
+            x += dx; y += dy
 
-    def _valid_position(self, grid, word, x, y, direction):
-        dx, dy = (1, 0) if direction == 'H' else (0, 1)
-        if x + dx * (len(word)-1) >= self.width or y + dy * (len(word)-1) >= self.height:
+    def _valid_position(self, grid, word, x, y, d):
+        dx, dy = (1, 0) if d == 'H' else (0, 1)
+        # Check word fits
+        if x + dx*(len(word)-1) >= self.width or y + dy*(len(word)-1) >= self.height:
             return False
-        for letter in word:
-            existing = grid[y][x]
-            if existing not in (None, letter):
+        # Check cell before and after word for buffer
+        bx, by = x - dx, y - dy
+        ex, ey = x + dx*len(word), y + dy*len(word)
+        for cx, cy in ((bx, by), (ex, ey)):
+            if 0 <= cx < self.width and 0 <= cy < self.height:
+                if grid[cy][cx] is not None:
+                    return False
+        # Check each letter cell
+        cx, cy = x, y
+        for ch in word:
+            existing = grid[cy][cx]
+            if existing not in (None, ch):
                 return False
+            # Ensure orthogonal neighbors empty
             if existing is None:
-                nx1, ny1 = x + dy, y + dx
-                nx2, ny2 = x - dy, y - dx
-                for nx, ny in ((nx1, ny1), (nx2, ny2)):
-                    if 0 <= nx < self.width and 0 <= ny < self.height and grid[ny][nx] is not None:
-                        return False
-            x += dx
-            y += dy
+                for ox, oy in ((1,0),(-1,0),(0,1),(0,-1)):
+                    if ox == dx and oy == dy or ox == -dx and oy == -dy:
+                        continue
+                    nx, ny = cx+ox, cy+oy
+                    if 0 <= nx < self.width and 0 <= ny < self.height:
+                        if grid[ny][nx] is not None:
+                            return False
+            cx += dx; cy += dy
         return True
 
-    def _score_position(self, grid, word, x, y, direction):
-        dx, dy = (1, 0) if direction == 'H' else (0, 1)
+    def _score_position(self, grid, word, x, y, d):
+        dx, dy = (1, 0) if d == 'H' else (0, 1)
         score = 0
-        for letter in word:
-            if grid[y][x] == letter:
+        for ch in word:
+            if grid[y][x] == ch:
                 score += 1
-            x += dx
-            y += dy
+            x += dx; y += dy
         return score
 
     def _find_best_positions(self, grid, word):
-        candidates = []
+        cand = []
         for y in range(self.height):
             for x in range(self.width):
-                for direction in ('H', 'V'):
-                    if self._valid_position(grid, word, x, y, direction):
-                        score = self._score_position(grid, word, x, y, direction)
-                        candidates.append(((x, y, direction), score))
-        return candidates
+                for d in ('H','V'):
+                    if self._valid_position(grid, word, x, y, d):
+                        cand.append(((x,y,d), self._score_position(grid, word, x, y, d)))
+        return cand
 
     def generate(self):
-        best_grid = None
-        best_count = -1
-        best_placed_info = []
-        start_time = time.time()
-
-        while time.time() - start_time < self.time_limit:
+        best, best_count, best_info = None, -1, []
+        end_time = time.time() + self.time_limit
+        while time.time() < end_time:
             grid = self._create_empty_grid()
             placed_info = []
-            placed = 0
-
-            # Размещение первого слова в центре
-            if not self.word_list:
+            # Place first word centered
+            w0, c0 = self.word_list[0]
+            d0 = random.choice(('H','V'))
+            if d0=='H': x0=(self.width-len(w0))//2; y0=self.height//2
+            else: x0=self.width//2; y0=(self.height-len(w0))//2
+            if not self._valid_position(grid, w0, x0, y0, d0):
                 continue
-            first_word_info = self.word_list[0]
-            first_word = first_word_info[0]
-            clue = first_word_info[1]
-            dir0 = random.choice(['H', 'V'])
-            if dir0 == 'H':
-                cx = (self.width - len(first_word)) // 2
-                cy = self.height // 2
-            else:
-                cx = self.width // 2
-                cy = (self.height - len(first_word)) // 2
-            if self._valid_position(grid, first_word, cx, cy, dir0):
-                self._place_word(grid, first_word, (cx, cy, dir0))
-                placed_info.append({
-                    'word': first_word,
-                    'x': cx,
-                    'y': cy,
-                    'direction': dir0,
-                    'clue': clue
-                })
-                placed += 1
-            else:
-                continue
-
-            # Размещение остальных слов
-            for word_info in self.word_list[1:]:
-                word, clue = word_info
-                candidates = self._find_best_positions(grid, word)
-                if not candidates:
-                    continue
-                max_score = max(score for _, score in candidates)
-                bests = [pos for pos, score in candidates if score == max_score]
+            self._place_word(grid, w0, (x0,y0,d0))
+            placed_info.append({'word':w0,'x':x0,'y':y0,'d':d0,'clue':c0})
+            # Place remaining words
+            for w, clue in self.word_list[1:]:
+                poss = self._find_best_positions(grid, w)
+                if not poss: continue
+                max_s = max(s for _,s in poss)
+                if max_s<=0: continue
+                bests = [p for p,s in poss if s==max_s]
                 choice = random.choice(bests)
-                if max_score == 0:
-                    continue
-                self._place_word(grid, word, choice)
-                placed_info.append({
-                    'word': word,
-                    'x': choice[0],
-                    'y': choice[1],
-                    'direction': choice[2],
-                    'clue': clue
-                })
-                placed += 1
-
-            # Второй проход
+                self._place_word(grid, w, choice)
+                placed_info.append({'word':w,'x':choice[0],'y':choice[1],'d':choice[2],'clue':clue})
+            # Second pass
             if self.try_second_pass:
-                for word_info in self.word_list:
-                    word, clue = word_info
-                    # Пропустить, если слово уже размещено
-                    if any(info['word'] == word for info in placed_info):
-                        continue
-                    candidates = self._find_best_positions(grid, word)
-                    if candidates:
-                        max_score = max(score for _, score in candidates)
-                        bests = [pos for pos, score in candidates if score == max_score]
-                        if max_score > 0:
-                            choice = random.choice(bests)
-                            self._place_word(grid, word, choice)
-                            placed_info.append({
-                                'word': word,
-                                'x': choice[0],
-                                'y': choice[1],
-                                'direction': choice[2],
-                                'clue': clue
-                            })
-                            placed += 1
+                for w, clue in self.word_list:
+                    if any(i['word']==w for i in placed_info): continue
+                    poss = self._find_best_positions(grid, w)
+                    if not poss: continue
+                    max_s = max(s for _,s in poss)
+                    if max_s<=0: continue
+                    choice = random.choice([p for p,s in poss if s==max_s])
+                    self._place_word(grid, w, choice)
+                    placed_info.append({'word':w,'x':choice[0],'y':choice[1],'d':choice[2],'clue':clue})
+            if len(placed_info) > best_count:
+                best_count = len(placed_info)
+                best = [row[:] for row in grid]
+                best_info = list(placed_info)
+        return best, best_count, best_info
 
-            if placed > best_count:
-                best_count = placed
-                best_grid = [row[:] for row in grid]
-                best_placed_info = placed_info.copy()
-
-        return best_grid, best_count, best_placed_info
-
-    @staticmethod
-    def print_grid(grid):
-        for row in grid:
-            print(''.join(letter if letter is not None else '#' for letter in row))
-
-    def generate_json(self, filename=None):
-        grid, count, placed_info = self.generate()
-
-        # Форматируем данные для JSON
-        result = {
-            "metadata": {
-                "generated_at": datetime.now().isoformat(),
-                "width": self.width,
-                "height": self.height,
-                "total_words": count,
-                "attempted_words": len(self.word_list)
+    def generate_json(self):
+        grid, count, info = self.generate()
+        res = {
+            'metadata':{
+                'generated_at':datetime.now().isoformat(),
+                'width':self.width,'height':self.height,
+                'total_words':count,'attempted_words':len(self.word_list)
             },
-            "grid": [[cell or "#" for cell in row] for row in grid],
-            "clues": [
-                {
-                    "word": info['word'],
-                    "clue": info['clue'],
-                    "x": info['x'] + 1,  # 1-based координаты
-                    "y": info['y'] + 1,
-                    "direction": "horizontal" if info['direction'] == 'H' else "vertical",
-                    "length": len(info['word'])
-                }
-                for info in placed_info
-            ]
+            'grid':[[cell or '#' for cell in row] for row in grid],
+            'clues':[]
         }
+        for i in info:
+            res['clues'].append({
+                'word':i['word'],'clue':i['clue'],
+                'x':i['x']+1,'y':i['y']+1,
+                'direction':'horizontal' if i['d']=='H' else 'vertical',
+                'length':len(i['word'])
+            })
+        return res
 
-        if not filename:
-            filename = f"crossword_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
-
-        return filename
-# Пример использования:
 if __name__ == '__main__':
-    words = []
-    for item in get_random_words():
-        words.append((item['word'], item['clue']))
+    words = [(item['word'], item['clue']) for item in get_random_words()]
     cg = CrosswordGenerator(15, 15, words, time_limit=5.0, try_second_pass=True)
-    output_file = cg.generate_json()
-    print(f"Кроссворд сохранён в файл: {output_file}")
+    # Generate JSON and extract the grid
+    result = cg.generate_json()
+    grid = result['grid']  # list of lists with letters and '#'
+    print(result)
+    # Print the crossword in console
+    for row in grid:
+        print(''.join(cell.replace("#", " ") for cell in row))
+
+    print(f"\nTotal words placed: {result['metadata']['total_words']}")
