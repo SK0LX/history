@@ -89,7 +89,7 @@ function renderClues() {
         <h3>Горизонтальные:</h3>
         ${cluesH.map((clue, idx) => `
             <div class="clue">
-                <b>${idx + 1}. ${clue.word}</b>
+                <b>${idx + 1}</b>
                 <div>${clue.clue}</div>
             </div>
         `).join('')}
@@ -99,7 +99,7 @@ function renderClues() {
         <h3>Вертикальные:</h3>
         ${cluesV.map((clue, idx) => `
             <div class="clue">
-                <b>${idx + 1}. ${clue.word}</b>
+                <b>${idx + 1}</b>
                 <div>${clue.clue}</div>
             </div>
         `).join('')}
@@ -114,33 +114,52 @@ function renderClues() {
 function checkAnswers() {
     if (!crosswordData) return;
 
-    let correctCount = 0;
-    let totalCells = 0;
+    let allCorrect = true;
+    const results = [];
 
-    crosswordData.grid.forEach((row, y) => {
-        row.forEach((cell, x) => {
-            if (cell !== '#') {
-                totalCells++;
-                const input = document.querySelector(`input[data-x="${x}"][data-y="${y}"]`);
-                if (input && input.value.toUpperCase() === cell) {
-                    correctCount++;
-                    input.parentElement.classList.add('correct');
-                } else if (input) {
-                    input.parentElement.classList.add('incorrect');
-                }
-            }
-        });
+    crosswordData.clues.forEach(clue => {
+        let userWord = '';
+        const startX = clue.x - 1;
+        const startY = clue.y - 1;
+
+        for (let i = 0; i < clue.word.length; i++) {
+            const x = clue.direction === 'horizontal' ? startX + i : startX;
+            const y = clue.direction === 'vertical' ? startY + i : startY;
+            const input = document.querySelector(`input[data-x="${x}"][data-y="${y}"]`);
+            userWord += input?.value.toUpperCase() || '';
+        }
+
+        const isCorrect = userWord === clue.word.toUpperCase();
+        if (!isCorrect) allCorrect = false;
+        results.push({ clue, isCorrect });
     });
+
+    document.querySelectorAll('.cell').forEach(cell => {
+        cell.classList.remove('correct', 'incorrect');
+    });
+
+    results.forEach(({ clue, isCorrect }) => {
+        const className = isCorrect ? 'correct' : 'incorrect';
+        for (let i = 0; i < clue.word.length; i++) {
+            const x = clue.direction === 'horizontal' ? clue.x - 1 + i : clue.x - 1;
+            const y = clue.direction === 'vertical' ? clue.y - 1 + i : clue.y - 1;
+            const cell = document.querySelector(`.cell[data-coords="${x}-${y}"]`);
+            if (cell) cell.classList.add(className);
+        }
+    });
+
+    const existingMessage = document.getElementById('result-message');
+    if (existingMessage) existingMessage.remove();
 
     const resultDiv = document.createElement('div');
     resultDiv.id = 'result-message';
     resultDiv.innerHTML = `
         <div class="result-box">
-            Правильных ответов: ${correctCount} из ${totalCells}
+            ${allCorrect ? 'Секретное слово: Обезьяна Чичичи' : `Правильно: ${results.filter(r => r.isCorrect).length} из ${crosswordData.clues.length}`}
         </div>
     `;
-    document.querySelector('.container').prepend(resultDiv);
-    setTimeout(() => resultDiv.remove(), 3000);
+    document.body.appendChild(resultDiv);
+    setTimeout(() => resultDiv.remove(), allCorrect ? 5000 : 3000);
 }
 
 async function resetCrossword() {
