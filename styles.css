@@ -1,10 +1,65 @@
 ﻿body {
-    font-family: Arial, sans-serif;
+    font-family: 'Old Standard TT', serif;
     margin: 0;
     padding: 20px;
-    background: #f5f5f5;
+    background: url('old-paper-texture.jpg') fixed;
+    background-size: cover;
+    color: #3d2b1f;
+    min-height: 100vh;
 }
 
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(237, 224, 212, 0.3);
+    z-index: -1;
+}
+
+/* Заголовок */
+.header-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 30px 0;
+    padding: 0 20px;
+}
+
+.header-line {
+    flex: 1;
+    height: 2px;
+    background: #6d4c41;
+    margin: 0 20px;
+    opacity: 0.7;
+}
+
+#main-title {
+    text-align: center;
+    font-size: 2.8em;
+    letter-spacing: 3px;
+    color: #2a1910;
+    text-transform: uppercase;
+    padding: 15px 40px;
+    background: rgba(255, 250, 240, 0.9);
+    border: 2px solid #6d4c41;
+    box-shadow: 5px 5px 15px rgba(0,0,0,0.2);
+    position: relative;
+}
+
+#main-title span {
+    display: block;
+    font-size: 0.6em;
+    text-transform: none;
+    letter-spacing: 1px;
+    margin-top: 12px;
+    color: #4a3528;
+    line-height: 1.4;
+}
+
+/* Сетка кроссворда */
 .container {
     display: flex;
     justify-content: center;
@@ -12,17 +67,19 @@
 }
 
 .crossword-wrapper {
-    background: white;
-    padding: 10px;
+    background: rgba(255, 250, 240, 0.9);
+    padding: 15px;
     border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    border: 2px solid #6d4c41;
+    box-shadow: 5px 5px 15px rgba(0,0,0,0.3);
+    position: relative;
 }
 
 #crossword-grid {
     display: grid;
     gap: 0;
     background: white;
-    border: 2px solid #333;
+    border: 2px solid #6d4c41;
 }
 
 .cell {
@@ -32,7 +89,8 @@
     align-items: center;
     justify-content: center;
     position: relative;
-    border: 1px solid #ddd;
+    border: 1px solid #8b7355;
+    background: rgba(255, 255, 255, 0.9);
 }
 
 .cell.block {
@@ -48,6 +106,7 @@
     font-weight: bold;
     font-size: 16px;
     background: transparent;
+    font-family: 'Old Standard TT', serif;
 }
 
 .cell-number {
@@ -59,24 +118,41 @@
     pointer-events: none;
 }
 
+/* Колонки с подсказками */
 .clues-column {
     width: 300px;
     padding: 15px;
-    background: white;
+    background: rgba(255, 250, 240, 0.9);
     border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    border: 2px solid #6d4c41;
+    box-shadow: 5px 5px 15px rgba(0,0,0,0.3);
 }
 
 .clue {
     margin: 10px 0;
     padding: 8px;
-    background: #f8f8f8;
+    background: rgba(237, 224, 212, 0.9);
     border-radius: 4px;
+    border: 1px solid #8b7355;
 }
 
 .clue b {
     color: #2c3e50;
+    margin-right: 8px;
+    font-family: 'Old Standard TT', serif;
 }
+
+#clues-horizontal .clue b::before {
+    content: "→ ";
+    color: #6d4c41;
+}
+
+#clues-vertical .clue b::before {
+    content: "↓ ";
+    color: #4a3528;
+}
+
+/* Кнопки */
 .controls {
     text-align: center;
     margin-bottom: 20px;
@@ -85,38 +161,37 @@
 .controls button {
     padding: 12px 25px;
     margin: 0 10px;
-    background: #2196F3;
+    background: #6d4c41;
     border: none;
     border-radius: 25px;
     color: white;
     font-size: 14px;
     transition: 0.3s;
+    font-family: 'Old Standard TT', serif;
+    letter-spacing: 1px;
 }
 
 .controls button:hover {
-    background: #1976D2;
+    background: #5a3d32;
     transform: translateY(-2px);
     box-shadow: 0 3px 8px rgba(0,0,0,0.2);
 }
+
+/* Уведомления */
 .result-box {
     position: fixed;
     top: 20px;
     left: 50%;
     transform: translateX(-50%);
-    background: #4CAF50;
+    background: #6d4c41;
     color: white;
     padding: 15px 30px;
     border-radius: 25px;
     box-shadow: 0 3px 15px rgba(0,0,0,0.2);
     z-index: 1000;
-    animation: slideIn 0.5s ease-out;
     animation: slideInOut 3.5s forwards;
 }
 
-@keyframes slideIn {
-    from { top: -50px; }
-    to { top: 20px; }
-}
 @keyframes slideInOut {
     0% { top: -50px; opacity: 0; }
     10% { top: 20px; opacity: 1; }
@@ -124,16 +199,17 @@
     100% { top: -50px; opacity: 0; }
 }
 
-.clue b {
-    color: #2c3e50;
-    margin-right: 8px;
-}
-#clues-horizontal .clue b::before {
-    content: "→ ";
-    color: #2196F3;
-}
-
-#clues-vertical .clue b::before {
-    content: "↓ ";
-    color: #4CAF50;
+/* Эффект старения бумаги */
+.crossword-wrapper::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+            rgba(0,0,0,0.03) 50%,
+            rgba(0,0,0,0.1) 50%
+    );
+    pointer-events: none;
 }
