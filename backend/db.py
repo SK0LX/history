@@ -1,29 +1,47 @@
-﻿import os
+import os
+from venv import logger
+
 import psycopg2
 import random
 
-def get_random_words():
-    url = os.getenv('DATABASE_URL',
-                    'postgresql://postgres:postgres@db:5432/postgres')
+from psycopg2 import sql
+
+
+def get_random_words(limit=50):
+    """Получаем случайные слова из базы данных"""
+    conn = None  # Инициализируем переменную
     try:
-        conn = psycopg2.connect(url)
-        with conn.cursor() as cursor:
-            query = """
-            WITH random_limit AS (
-                SELECT floor(random() * 9 + 12)::int AS limit_value
-            )
-            SELECT word, clue 
-            FROM words
-            ORDER BY random()
-            LIMIT (SELECT limit_value FROM random_limit);
-            """
-            cursor.execute(query)
-            results = cursor.fetchall()
-            columns = [desc[0] for desc in cursor.description]
-            return [dict(zip(columns, row)) for row in results]
+        # Подключение к базе данных
+        conn = psycopg2.connect(
+            dbname=os.getenv("POSTGRES_DB", "postgres"),
+            user=os.getenv("POSTGRES_USER", "postgres"),
+            password=os.getenv("POSTGRES_PASSWORD", "postgres"),
+            host=os.getenv("DB_HOST", "db"),
+            port=os.getenv("DB_PORT", "5432")
+        )
+
+        # Выполняем запрос
+        with conn.cursor() as cur:
+            query = sql.SQL("""
+                SELECT word, clue 
+                FROM words 
+                ORDER BY RANDOM() 
+                LIMIT %s
+            """)
+            cur.execute(query, (limit,))
+
+            result = [
+                {"word": row[0], "clue": row[1]}
+                for row in cur.fetchall()
+            ]
+
+        return result
+
     except Exception as e:
-        print(f"Ошибка: {e}")
+        logger.error(f"Ошибка при запросе к БД: {str(e)}")
         return []
+
     finally:
-        if conn:
+        # Всегда закрываем соединение, если оно было открыто
+        if conn is not None:
             conn.close()
