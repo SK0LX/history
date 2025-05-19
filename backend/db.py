@@ -1,15 +1,32 @@
 import os
+import random
 from venv import logger
 
 import psycopg2
-import random
-
 from psycopg2 import sql
 
+# Глобальная переменная для кэширования всех слов из БД
+_cached_words = None
 
 def get_random_words(limit=50):
-    """Получаем случайные слова из базы данных"""
-    conn = None  # Инициализируем переменную
+    """Возвращает случайные слова из кэшированного списка."""
+    global _cached_words
+    
+    # Загружаем слова при первом вызове
+    if _cached_words is None:
+        _cached_words = _load_all_words_from_db()
+    
+    # Если список слов пуст или загрузка не удалась
+    if not _cached_words:
+        return []
+    
+    # Выбираем случайные слова из кэша
+    sample_size = min(limit, len(_cached_words))
+    return random.sample(_cached_words, sample_size)
+
+def _load_all_words_from_db():
+    """Загружает все слова из базы данных и возвращает список."""
+    conn = None
     try:
         # Подключение к базе данных
         conn = psycopg2.connect(
@@ -19,29 +36,19 @@ def get_random_words(limit=50):
             host=os.getenv("DB_HOST", "db"),
             port=os.getenv("DB_PORT", "5432")
         )
-
-        # Выполняем запрос
+        
+        # Получаем все записи из таблицы
         with conn.cursor() as cur:
-            query = sql.SQL("""
-                SELECT word, clue 
-                FROM words 
-                ORDER BY RANDOM() 
-                LIMIT %s
-            """)
-            cur.execute(query, (limit,))
-
-            result = [
+            cur.execute(sql.SQL("SELECT word, clue FROM words"))
+            return [
                 {"word": row[0], "clue": row[1]}
                 for row in cur.fetchall()
             ]
-
-        return result
-
+    
     except Exception as e:
-        logger.error(f"Ошибка при запросе к БД: {str(e)}")
-        return []
-
+        logger.error(f"Ошибка загрузки слов: {str(e)}")
+        return None  # Ошибка загрузки
+    
     finally:
-        # Всегда закрываем соединение, если оно было открыто
         if conn is not None:
             conn.close()
