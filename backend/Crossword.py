@@ -2,28 +2,51 @@ import json
 import random
 import time
 from datetime import datetime
+import logging
 
 from db import get_random_words
 
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class CrosswordGenerator:
     def __init__(self, width, height, word_list, time_limit=5.0, try_second_pass=False):
         self.width = width
         self.height = height
-        # Normalize word_list to (word, clue) tuples
+        
+        # Проверка входных данных
+        if not word_list:
+            logger.error("Получен пустой список слов!")
+            raise ValueError("Список слов не может быть пустым")
+
+        # Нормализация и фильтрация слов
         processed = []
         for w in word_list:
             if isinstance(w, str):
-                processed.append((w, ''))
-            else:
-                processed.append((w[0], w[1]))
-        # Filter out words contained in longer words, sort by length desc
+                processed.append((w.strip().upper(), ''))  # Нормализация регистра
+            elif isinstance(w, (list, tuple)) and len(w) >= 1:
+                processed.append((w[0].strip().upper(), w[1] if len(w) > 1 else ''))
+        
+        # Фильтрация слишком длинных слов
+        max_possible_length = max(width, height)
+        filtered = [
+            (word, clue) for word, clue in processed 
+            if 0 < len(word) <= max_possible_length
+        ]
+        
+        if not filtered:
+            logger.error("Нет подходящих слов после фильтрации!")
+            raise ValueError("Нет слов подходящей длины")
+
+        # Упрощенная фильтрация (можно заменить на более сложную логику)
         self.word_list = sorted(
-            [w for w in processed if not any(w[0] != o[0] and w[0] in o[0] for o in processed)],
-            key=lambda x: len(x[0]), reverse=True
-        )
+            filtered,
+            key=lambda x: (-len(x[0]), x[0]))  # Сортировка по длине и алфавиту
+
         self.time_limit = time_limit
         self.try_second_pass = try_second_pass
+        logger.info(f"Инициализирован генератор с {len(self.word_list)} словами")
 
     def _create_empty_grid(self):
         return [[None] * self.width for _ in range(self.height)]
@@ -84,45 +107,56 @@ class CrosswordGenerator:
         return cand
 
     def generate(self):
+        if not self.word_list:
+            logger.error("Попытка генерации без слов!")
+            return None, 0, []
+
         best, best_count, best_info = None, -1, []
         end_time = time.time() + self.time_limit
-        while time.time() < end_time:
-            grid = self._create_empty_grid()
-            placed_info = []
-            # Place first word centered
-            w0, c0 = self.word_list[0]
-            d0 = random.choice(('H','V'))
-            if d0=='H': x0=(self.width-len(w0))//2; y0=self.height//2
-            else: x0=self.width//2; y0=(self.height-len(w0))//2
-            if not self._valid_position(grid, w0, x0, y0, d0):
-                continue
-            self._place_word(grid, w0, (x0,y0,d0))
-            placed_info.append({'word':w0,'x':x0,'y':y0,'d':d0,'clue':c0})
-            # Place remaining words
-            for w, clue in self.word_list[1:]:
-                poss = self._find_best_positions(grid, w)
-                if not poss: continue
-                max_s = max(s for _,s in poss)
-                if max_s<=0: continue
-                bests = [p for p,s in poss if s==max_s]
-                choice = random.choice(bests)
-                self._place_word(grid, w, choice)
-                placed_info.append({'word':w,'x':choice[0],'y':choice[1],'d':choice[2],'clue':clue})
-            # Second pass
-            if self.try_second_pass:
-                for w, clue in self.word_list:
-                    if any(i['word']==w for i in placed_info): continue
+        
+        try:
+            # Основная логика генерации
+            while time.time() < end_time:
+                grid = self._create_empty_grid()
+                placed_info = []
+                # Place first word centered
+                w0, c0 = self.word_list[0]
+                d0 = random.choice(('H','V'))
+                if d0=='H': x0=(self.width-len(w0))//2; y0=self.height//2
+                else: x0=self.width//2; y0=(self.height-len(w0))//2
+                if not self._valid_position(grid, w0, x0, y0, d0):
+                    continue
+                self._place_word(grid, w0, (x0,y0,d0))
+                placed_info.append({'word':w0,'x':x0,'y':y0,'d':d0,'clue':c0})
+                # Place remaining words
+                for w, clue in self.word_list[1:]:
                     poss = self._find_best_positions(grid, w)
                     if not poss: continue
                     max_s = max(s for _,s in poss)
                     if max_s<=0: continue
-                    choice = random.choice([p for p,s in poss if s==max_s])
+                    bests = [p for p,s in poss if s==max_s]
+                    choice = random.choice(bests)
                     self._place_word(grid, w, choice)
                     placed_info.append({'word':w,'x':choice[0],'y':choice[1],'d':choice[2],'clue':clue})
-            if len(placed_info) > best_count:
-                best_count = len(placed_info)
-                best = [row[:] for row in grid]
-                best_info = list(placed_info)
+                # Second pass
+                if self.try_second_pass:
+                    for w, clue in self.word_list:
+                        if any(i['word']==w for i in placed_info): continue
+                        poss = self._find_best_positions(grid, w)
+                        if not poss: continue
+                        max_s = max(s for _,s in poss)
+                        if max_s<=0: continue
+                        choice = random.choice([p for p,s in poss if s==max_s])
+                        self._place_word(grid, w, choice)
+                        placed_info.append({'word':w,'x':choice[0],'y':choice[1],'d':choice[2],'clue':clue})
+                if len(placed_info) > best_count:
+                    best_count = len(placed_info)
+                    best = [row[:] for row in grid]
+                    best_info = list(placed_info)
+        except Exception as e:
+            logger.error(f"Ошибка генерации: {str(e)}")
+            return None, 0, []
+
         return best, best_count, best_info
 
     def generate_json(self):
